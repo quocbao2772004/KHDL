@@ -1,0 +1,31 @@
+/* Search Type Selector */
+.search-container {
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.search-type {
+    background: transparent;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.search-type option {
+    background: #141414;
+    color: #fff;
+}
+
+#searchInput {
+    border: none !important;
+    background: transparent !important;
+    margin-left: 0 !important;
+}

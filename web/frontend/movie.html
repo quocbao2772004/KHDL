@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MovieFlix - Details</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <!-- Main App (No Auth Overlay needed if we assume logged in, but good to keep check) -->
+    <div id="app" style="display:block;"> <!-- Force block, auth check will redirect if needed -->
+        <header id="navbar" style="background: #141414;">
+            <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer">MOVIEFLIX</div>
+            <div class="nav-right">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Titles, people, genres"
+                        onkeypress="handleSearch(event)">
+                </div>
+                <div id="userDisplay">User</div>
+                <button onclick="logout()"
+                    style="background:none; border:none; color:#fff; cursor:pointer;">Logout</button>
+            </div>
+        </header>
+
+        <div id="details-view" style="padding-top: 80px;">
+            <div class="hero" id="detailsHero" style="height: 60vh;">
+                <div class="hero-content">
+                    <h1 class="hero-title" id="detailsTitle">Loading...</h1>
+                    <div class="modal-meta" id="detailsMeta"
+                        style="margin-bottom: 20px; font-size: 1.2rem; color: #ccc;"></div>
+                    <p class="hero-desc" id="detailsOverview"></p>
+                    <button class="btn btn-play" onclick="alert('Playing movie...')">▶ Play</button>
+                </div>
+            </div>
+
+            <div class="row">
+                <h3>Recommendations</h3>
+                <div class="rec-grid" id="detailsRecs">
+                    <!-- Recommendations -->
+                </div>
+            </div>
+            <div class="row" id="cfRecsSection" style="display:none; margin-top: 40px;">
+                <h3>You may also like</h3>
+                <div class="rec-grid" id="cfRecs">
+                    <!-- Collaborative Filtering Recommendations -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,55 @@
+web/backend/__pycache__/
+crawl_data/__pycache__/
+__pycache__/
+web/backend/data/posters/
+web/backend/data/ratings_mapped_to_tmdb.csv
+web/backend/data/X_tfidf_new.npz
+web/backend/data/tmdb_crawled_fast.csv
+web/backend/data/ratings_mapped_to_tmdb.parquet
+web/backend/recommendation/tfidf_matrix.npz
+web/backend/recommendation/tfidf_vectorizer.joblib
+web/backend/data/tfidf_vectorizer.pkl
+web/backend/models
+MovieLens/
+# ===== Python bytecode =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===== Virtual environments =====
+.venv/
+venv/
+env/
+
+# ===== Test / type checker cache =====
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== VS Code =====
+.vscode/
+*.code-workspace
+
+# ===== Data / Models (rất quan trọng cho mày) =====
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.npy
+*.nii
+*.nii.gz
+*.dcm
+
+# ===== Logs =====
+*.log
+logs/

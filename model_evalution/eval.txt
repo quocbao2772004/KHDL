@@ -1,0 +1,77 @@
+Rows used: 11732970
+Users: 317095 Movies: 1247
+Split sizes: train=8213079, valid=1173297, test=2346594
+
+Training params: {'n_factors': 50, 'n_epochs': 10, 'lr_all': 0.005, 'reg_all': 0.02}
+Valid RMSE=0.8361 | MAE=0.6268
+
+Training params: {'n_factors': 80, 'n_epochs': 15, 'lr_all': 0.005, 'reg_all': 0.02}
+Valid RMSE=0.8116 | MAE=0.6058
+
+Training params: {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all': 0.02}
+Valid RMSE=0.7992 | MAE=0.5939
+
+===== BEST PARAMS (by Valid RMSE) =====
+{'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all': 0.02} Valid RMSE: 0.7991505864942426
+
+===== TEST METRICS =====
+RMSE: 0.7977
+MAE : 0.5934
+Precision@10: 0.8211
+Recall@10   : 0.5644
+[1]    25368 killed     /home/zeus/miniconda3/envs/cloudspace/bin/python 
+⚡ ~ /home/zeus/miniconda3/envs/cloudspace/bin/python /teamspace/studios/this_studio/main.py
+Loading parquet: /teamspace/studios/this_studio/ratings_cf.parquet
+Original rows: 11732970
+Users: 317095 Movies: 1247
+Capping ratings per movie to <= 4000 (keep all movies)...
+Rows after cap: 2763600
+Users: 243953 Movies: 1247
+Split sizes: train=1934520, valid=276360, test=552720
+
+=== TRAIN ONE MODEL ===
+Valid RMSE: 0.8667 | MAE: 0.6512
+
+=== BEST PARAMS ===
+{'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all': 0.02, 'random_state': 42}
+Best Valid RMSE: 0.8667324330489088
+
+===== TEST METRICS =====
+RMSE: 0.8654
+MAE : 0.6501
+Precision@10: 0.7807
+Recall@10   : 0.4933
+
+
+=== TRAINING (max 200 epochs) ===
+Epoch 1/200, Train Loss: 3.3417, Validation Loss: 1.8755
+Epoch 10/200, Train Loss: 0.5705, Validation Loss: 1.1421
+Epoch 20/200, Train Loss: 0.2796, Validation Loss: 1.2952
+
+Early Stopping triggered at epoch 20.
+
+Best Validation Loss: 1.1421 at epoch 10
+
+=== EVALUATION ===
+
+Validation Set Metrics:
+  rmse: 1.1381
+  mae: 0.7809
+  recall@5: 0.9620
+  precision@5: 0.3632
+  recall@10: 0.9932
+  precision@10: 0.2014
+  recall@20: 0.9995
+  precision@20: 0.1039
+
+Test Set Metrics:
+  rmse: 1.1356
+  mae: 0.7798
+  recall@5: 0.9622
+  precision@5: 0.3625
+  recall@10: 0.9934
+  precision@10: 0.2009
+  recall@20: 0.9995
+  precision@20: 0.1036
+
+Saved loss plot: /home/asiagroup/AI/bao/khdl/models/lightgcn_loss_plot.png
