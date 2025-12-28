@@ -1,9 +1,10 @@
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://distinct-adapted-hippo.ngrok-free.app';
+console.log("MovieFlix App.js Loaded - Version 22 - " + new Date().toLocaleString());
 let currentUser = null;
 let heroMovie = null;
 
 // --- Auth Logic ---
-function checkAuth() {
+async function checkAuth() {
     console.log("Checking auth...");
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -11,7 +12,7 @@ function checkAuth() {
             currentUser = JSON.parse(storedUser);
             console.log("User logged in:", currentUser.username);
             updateAuthUI(true);
-            fetchUserRatings(); // Fetch ratings on login
+            await fetchUserRatings(); // Fetch ratings on login
             initRouter();
         } catch (e) {
             console.error("Error parsing user:", e);
@@ -60,7 +61,10 @@ async function handleLogin() {
     try {
         const res = await fetch(`${API_BASE}/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({ username: user, password: pass })
         });
 
@@ -75,7 +79,7 @@ async function handleLogin() {
         }
     } catch (e) {
         console.error(e);
-        alert('Login failed');
+        alert('Login failed: ' + e.message);
     }
 }
 
@@ -86,7 +90,10 @@ async function handleRegister() {
     try {
         const res = await fetch(`${API_BASE}/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({ username: user, password: pass })
         });
 
@@ -110,7 +117,9 @@ function logout() {
 // --- Data Fetching ---
 async function fetchMovies(page = 1, limit = 50) {
     try {
-        const res = await fetch(`${API_BASE}/movies?page=${page}&limit=${limit}`);
+        const res = await fetch(`${API_BASE}/movies?page=${page}&limit=${limit}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         return await res.json();
     } catch (e) {
         console.error(e);
@@ -152,24 +161,151 @@ async function initHomePage() {
         }
     });
 
-    // Check for search params FIRST
+    // Initial load
     const params = new URLSearchParams(window.location.search);
+    const view = params.get('view');
     const searchQuery = params.get('search');
 
-    if (searchQuery) {
+    if (view === 'evaluation') {
+        showEvaluation();
+    } else if (view === 'analysis') {
+        showAnalysis();
+    } else if (searchQuery) {
         console.log("Search query found on init:", searchQuery);
-        document.getElementById('searchInput').value = searchQuery;
-        // Trigger search immediately
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = searchQuery;
         await performSearch(searchQuery);
     } else {
         // Initial Load (only if no search)
         await loadAllMovies(1);
-
         // Trending Row
         const trendingData = await fetchMovies(1, 20);
         renderGrid('trendingRow', trendingData.movies || []);
+        showHome();
+    }
+
+    // Manual fallback for nav links if onclick fails
+    const navLinks = document.querySelectorAll('.nav-links span');
+    navLinks.forEach(span => {
+        span.addEventListener('click', (e) => {
+            const text = e.target.innerText.trim();
+            if (text === 'Home') showHome();
+            else if (text === 'Evaluation') showEvaluation();
+            else if (text === 'Analysis') showAnalysis();
+        });
+    });
+}
+
+function hideAllViews() {
+    const views = ['home-view', 'movie-view', 'evaluation-view', 'analysis-view', 'searchResults'];
+    views.forEach(v => {
+        const el = document.getElementById(v);
+        if (el) el.style.display = 'none';
+    });
+}
+
+function showHome() {
+    console.log("Showing Home View");
+    if (!document.getElementById('home-view')) {
+        window.location.href = 'index.html';
+        return;
+    }
+    hideAllViews();
+    const homeView = document.getElementById('home-view');
+    if (homeView) homeView.style.display = 'block';
+    window.scrollTo(0, 0);
+}
+
+function showEvaluation() {
+    console.log("Showing Evaluation View");
+    if (!document.getElementById('evaluation-view')) {
+        window.location.href = 'index.html?view=evaluation';
+        return;
+    }
+    hideAllViews();
+    const evalView = document.getElementById('evaluation-view');
+    if (evalView) {
+        evalView.style.display = 'block';
+        window.scrollTo(0, 0);
+        renderEvaluationCharts();
     }
 }
+
+function showAnalysis() {
+    console.log("Showing Analysis View");
+    if (!document.getElementById('analysis-view')) {
+        window.location.href = 'index.html?view=analysis';
+        return;
+    }
+    hideAllViews();
+    const analysisView = document.getElementById('analysis-view');
+    if (analysisView) {
+        analysisView.style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+}
+
+function renderEvaluationCharts() {
+    if (typeof Chart === 'undefined') {
+        console.warn("Chart.js not loaded yet. Retrying in 500ms...");
+        setTimeout(renderEvaluationCharts, 500);
+        return;
+    }
+    // BERT Chart
+    const bertCanvas = document.getElementById('bertChart');
+    if (bertCanvas) {
+        const bertCtx = bertCanvas.getContext('2d');
+        new Chart(bertCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Precision@10', 'Recall@10'],
+                datasets: [{
+                    label: 'BERT Performance',
+                    data: [0.7740, 0.7740],
+                    backgroundColor: ['rgba(229, 9, 20, 0.7)', 'rgba(229, 9, 20, 0.4)'],
+                    borderColor: ['rgba(229, 9, 20, 1)', 'rgba(229, 9, 20, 1)'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, max: 1, grid: { color: '#333' }, ticks: { color: '#ccc' } },
+                    x: { ticks: { color: '#ccc' } }
+                },
+                plugins: { legend: { labels: { color: '#fff' } } }
+            }
+        });
+    }
+
+    // LightGCN Chart
+    const gcnCanvas = document.getElementById('lightgcnChart');
+    if (gcnCanvas) {
+        const gcnCtx = gcnCanvas.getContext('2d');
+        new Chart(gcnCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Recall@5', 'Recall@10', 'Recall@20', 'Precision@5', 'Precision@10', 'Precision@20'],
+                datasets: [{
+                    label: 'LightGCN Metrics (Test Set)',
+                    data: [0.9622, 0.9934, 0.9995, 0.3625, 0.2009, 0.1036],
+                    backgroundColor: 'rgba(70, 211, 105, 0.6)',
+                    borderColor: 'rgba(70, 211, 105, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, max: 1.1, grid: { color: '#333' }, ticks: { color: '#ccc' } },
+                    x: { ticks: { color: '#ccc' } }
+                },
+                plugins: { legend: { labels: { color: '#fff' } } }
+            }
+        });
+    }
+}
+
 
 let currentPage = 1;
 const itemsPerPage = 50;
@@ -232,7 +368,9 @@ async function initMoviePage() {
     try {
         // Fetch Details
         console.log("Fetching details for:", title);
-        const res = await fetch(`${API_BASE}/movie/${encodeURIComponent(title)}`);
+        const res = await fetch(`${API_BASE}/movie/${encodeURIComponent(title)}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (res.ok) {
             const movie = await res.json();
             renderMovieDetails(movie);
@@ -242,18 +380,17 @@ async function initMoviePage() {
 
             // Fetch Recommendations
             console.log("Fetching recommendations for:", title);
-            const recRes = await fetch(`${API_BASE}/recommend/${encodeURIComponent(title)}?top_k=30`);
+            const recRes = await fetch(`${API_BASE}/recommend/${encodeURIComponent(title)}?top_k=30`, {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
+            });
             if (recRes.ok) {
                 const recs = await recRes.json();
                 renderGrid('detailsRecs', recs);
             }
 
-            // Fetch CF recommendations if user is logged in and has rated this movie
+            // Fetch CF recommendations if user is logged in
             if (currentUser && movie.tmdb_id) {
-                const myRating = userRatings[movie.tmdb_id] || 0;
-                if (myRating > 0) {
-                    fetchCFRecommendations(movie.tmdb_id);
-                }
+                fetchCFRecommendations(movie.tmdb_id);
             }
         } else {
             console.error("Movie not found API error");
@@ -362,6 +499,7 @@ function renderMovieDetails(movie) {
 
         // Render initial rating state
         const myRating = userRatings[movie.tmdb_id] || 0;
+        console.log(`Initial rating for movie ${movie.tmdb_id}:`, myRating);
         renderRatingUI(movie.tmdb_id, myRating);
 
     }
@@ -412,7 +550,13 @@ function renderGrid(elementId, movies) {
         div.style.position = 'relative';
         div.onclick = () => goToMovie(m.title);
 
-        const scoreHtml = m.score ? `<div style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.8); backdrop-filter: blur(4px); color:#46d369; padding:4px 8px; border-radius:6px; font-size:0.85rem; font-weight:700; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 2;">${(m.score * 100).toFixed(0)}%</div>` : '';
+        let scoreHtml = '';
+        if (m.score !== null && m.score !== undefined) {
+            const scoreVal = parseFloat(m.score);
+            if (!isNaN(scoreVal)) {
+                scoreHtml = `<div style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.8); backdrop-filter: blur(4px); color:#46d369; padding:4px 8px; border-radius:6px; font-size:0.85rem; font-weight:700; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 2;">${(scoreVal * 100).toFixed(0)}%</div>`;
+            }
+        }
 
         // Check for user rating (Below Score)
         let userRatingHtml = '';
@@ -476,25 +620,6 @@ function handleSearchInput(e) {
     }
 }
 
-function showHome() {
-    const searchContainer = document.getElementById('searchResults');
-    const hero = document.getElementById('hero');
-    const mainContent = document.getElementById('mainContent');
-
-    if (searchContainer) searchContainer.style.display = 'none';
-    if (hero) hero.style.display = 'block';
-    if (mainContent) mainContent.style.display = 'block';
-
-    // Clear URL search param
-    const url = new URL(window.location);
-    url.searchParams.delete('search');
-    window.history.pushState({}, '', url);
-
-    // Refresh recommendations when returning to home
-    if (currentUser) {
-        fetchAndRenderUserRecs();
-    }
-}
 
 async function performSearch(query) {
     await logAction('search', `Searched for: ${query}`);
@@ -510,17 +635,14 @@ async function performSearch(query) {
     }
 
     try {
-        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (res.ok) {
             const results = await res.json();
             const searchContainer = document.getElementById('searchResults');
             if (searchContainer) {
-                // Hide other content
-                const hero = document.getElementById('hero');
-                const mainContent = document.getElementById('mainContent');
-                if (hero) hero.style.display = 'none';
-                if (mainContent) mainContent.style.display = 'none';
-
+                hideAllViews();
                 searchContainer.style.display = 'block';
                 renderGrid('searchGrid', results);
             }
@@ -544,7 +666,10 @@ async function logAction(action, details) {
     try {
         await fetch(`${API_BASE}/log`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({
                 user_id: currentUser.user_id,
                 action: action,
@@ -560,7 +685,7 @@ async function logAction(action, details) {
 
 function displayCFRecommendations(recs, tmdb_id) {
     if (!recs || recs.length === 0) {
-        console.log("No CF recommendations to display");
+        console.warn(`No CF recommendations to display for movie ${tmdb_id}. API returned empty list.`);
         const cfSection = document.getElementById('cfRecsSection');
         if (cfSection) {
             cfSection.style.display = 'none';
@@ -610,10 +735,12 @@ async function fetchCFRecommendations(tmdb_id) {
         }
 
         console.log(`Fetching CF recommendations for movie ${tmdb_id}...`);
-        const res = await fetch(url);
+        const res = await fetch(url, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (res.ok) {
             const recs = await res.json();
-            console.log(`Received ${recs ? recs.length : 0} CF recommendations`);
+            console.log(`Received ${recs ? recs.length : 0} CF recommendations for movie ${tmdb_id}`);
             if (recs && recs.length > 0) {
                 displayCFRecommendations(recs, tmdb_id);
             } else {
@@ -639,7 +766,10 @@ async function rateMovie(movieId, rating) {
     try {
         const res = await fetch(`${API_BASE}/rate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({
                 user_id: currentUser.user_id,
                 movie_id: movieId,
@@ -676,7 +806,9 @@ let userRatings = {};
 async function fetchUserRatings() {
     if (!currentUser) return;
     try {
-        const res = await fetch(`${API_BASE}/ratings/${currentUser.user_id}`);
+        const res = await fetch(`${API_BASE}/ratings/${currentUser.user_id}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (res.ok) {
             const data = await res.json();
             userRatings = {};
@@ -716,7 +848,9 @@ async function fetchAndRenderUserRecs() {
     console.log("Fetching recommendations for user:", currentUser.user_id);
     try {
         // Add timestamp to prevent caching
-        const recRes = await fetch(`${API_BASE}/recommend/user/${currentUser.user_id}?_=${new Date().getTime()}`);
+        const recRes = await fetch(`${API_BASE}/recommend/user/${currentUser.user_id}?_=${new Date().getTime()}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (recRes.ok) {
             const recs = await recRes.json();
             console.log("Recs received:", recs.length);

@@ -11,6 +11,18 @@ web/backend/recommendation/tfidf_vectorizer.joblib
 web/backend/data/tfidf_vectorizer.pkl
 web/backend/models
 MovieLens/
+web/backend/check_mapping.py
+web/backend/check_mapping_2.py
+web/backend/check_logs.py 
+model_evalution/user_data.db
+web/backend/user_data.db
+web/backend/ngrok.log
+Bao_Cao_Final_Project_KHDL.md
+web/backend/user_data.db
+user_data.db
+web/backend/check_logs.py
+web/backend/test_db.py
+web/backend/test_recs.py
 # ===== Python bytecode =====
 __pycache__/
 *.py[cod]

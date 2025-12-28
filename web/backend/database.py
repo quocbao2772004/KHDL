@@ -30,6 +30,18 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     ''')
+
+    # Create ratings table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS ratings (
+            user_id INTEGER,
+            tmdb_id INTEGER,
+            rating REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, tmdb_id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    ''')
     
     conn.commit()
     conn.close()
@@ -110,6 +122,39 @@ def get_user_logs(user_id, limit=50):
     logs = c.fetchall()
     conn.close()
     return logs
+
+def save_rating(user_id, tmdb_id, rating):
+    """Save or update a user rating."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    c.execute('''
+        INSERT OR REPLACE INTO ratings (user_id, tmdb_id, rating, timestamp)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (user_id, tmdb_id, rating))
+    
+    conn.commit()
+    conn.close()
+
+def get_all_user_ratings(user_id):
+    """Get all ratings for a specific user."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    c.execute('SELECT tmdb_id, rating FROM ratings WHERE user_id = ?', (user_id,))
+    ratings = c.fetchall()
+    conn.close()
+    return [{"tmdb_id": r[0], "rating": r[1]} for r in ratings]
+
+def get_all_ratings():
+    """Get all ratings from all users (for initial loading/sync)."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    c.execute('SELECT user_id, tmdb_id, rating FROM ratings')
+    ratings = c.fetchall()
+    conn.close()
+    return ratings
 
 # Initialize DB on import
 if not os.path.exists(DB_NAME):

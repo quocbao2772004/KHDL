@@ -19,7 +19,7 @@ app = FastAPI(title="Movie Recommendation API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -27,6 +27,22 @@ app.add_middleware(
 # Include Routers
 app.include_router(auth.router)
 app.include_router(movies.router)
+
+@app.on_event("startup")
+async def startup_event():
+    print("Pre-loading models and data...")
+    try:
+        # Pre-load BERT (implicitly by calling a dummy recommend or just importing)
+        from recommendation import rcm_bert
+        # Pre-load LightGCN
+        from recommendation import rcm_lightgcn
+        rcm_lightgcn.preload()
+        # Pre-load movie data
+        from routers import movies
+        movies._load_data()
+        print("All models and data pre-loaded successfully.")
+    except Exception as e:
+        print(f"Error during pre-loading: {e}")
 
 @app.get("/")
 def read_root():

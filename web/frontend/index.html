@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MovieFlix - Home</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=22">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -36,7 +37,14 @@
     <!-- Main App -->
     <div id="app">
         <header id="navbar">
-            <div class="logo" onclick="showHome()" style="cursor:pointer">MOVIEFLIX</div>
+            <div class="logo-section">
+                <div class="logo" onclick="showHome()" style="cursor:pointer">MOVIEFLIX</div>
+                <div class="nav-links">
+                    <span onclick="showHome()">Home</span>
+                    <span onclick="showEvaluation()">Evaluation</span>
+                    <span onclick="showAnalysis()">Analysis</span>
+                </div>
+            </div>
 
             <div class="search-box">
                 <input type="text" id="searchInput" placeholder="Search movies, actors, directors..."
@@ -45,9 +53,10 @@
             </div>
 
             <div class="nav-right">
-                <div id="userDisplay">User</div>
+                <div id="userDisplay" style="font-size: 0.9rem; color: #aaa;">User</div>
+                <div style="font-size: 0.7rem; color: #555; margin-left: 10px;">v22</div>
                 <button onclick="logout()"
-                    style="background:none; border:none; color:#fff; cursor:pointer;">Logout</button>
+                    style="background:none; border:none; color:#fff; cursor:pointer; margin-left: 15px;">Logout</button>
             </div>
         </header>
 
@@ -86,9 +95,246 @@
                 </div>
             </div>
 
-            <div class="row" id="searchResults" style="display:none;">
-                <h3>Search Results</h3>
-                <div class="rec-grid" id="searchGrid"></div>
+        </div>
+
+        <div class="row" id="searchResults" style="display:none; padding: 100px 4% 40px;">
+            <h3>Search Results</h3>
+            <div class="rec-grid" id="searchGrid"></div>
+        </div>
+
+        <!-- Evaluation View -->
+        <div id="evaluation-view" style="display:none; padding: 100px 4% 40px;">
+            <h2 style="margin-bottom: 30px; font-size: 2.5rem;">Model Evaluation</h2>
+
+            <!-- Dataset Overview Section -->
+            <div class="dataset-section">
+                <h3 style="margin-bottom: 20px; color: #e50914;">Dataset Overview</h3>
+
+                <div class="data-grid">
+                    <div class="data-card">
+                        <h4>The MovieDB (TMDB)</h4>
+                        <p>The raw data was scraped from <strong>themoviedb.org</strong>, consisting of <strong>2,173
+                                movies</strong>. This source provides rich metadata but lacks detailed individual user
+                            voting information.</p>
+                    </div>
+                    <div class="data-card" style="border-left-color: #46d369;">
+                        <h4>MovieLens Integration</h4>
+                        <p>To train the <strong>LightGCN</strong> model, we integrated the <strong>MovieLens
+                                25M</strong> dataset. This merging process allows us to identify specific user voting
+                            behavior for the collected movies.</p>
+                    </div>
+                </div>
+
+                <div class="info-table-container">
+                    <table class="info-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30%;">Parameter</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Movie Attributes</strong></td>
+                                <td>
+                                    <span class="attribute-badge">tmdb_id</span>
+                                    <span class="attribute-badge">title</span>
+                                    <span class="attribute-badge">overview</span>
+                                    <span class="attribute-badge">release_date</span>
+                                    <span class="attribute-badge">genres</span>
+                                    <span class="attribute-badge">runtime</span>
+                                    <span class="attribute-badge">vote_average</span>
+                                    <span class="attribute-badge">vote_count</span>
+                                    <span class="attribute-badge">popularity</span>
+                                    <span class="attribute-badge">cast_top5</span>
+                                    <span class="attribute-badge">director</span>
+                                    <span class="attribute-badge">keywords</span>
+                                    <span class="attribute-badge">poster_path</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Merged Dataset Shape</strong></td>
+                                <td><code style="color: #46d369; font-size: 1.1rem;">(11,732,970, 4)</code> <span
+                                        style="color: #888; margin-left: 10px;">(After merging MovieLens 25M with 2,173
+                                        movies)</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4 style="margin-bottom: 15px; color: #fff;">Training Configuration</h4>
+                <div class="training-config">
+                    <div class="config-box">
+                        <span class="label">Epochs</span>
+                        <span class="value">100</span>
+                    </div>
+                    <div class="config-box">
+                        <span class="label">Cap Per Movie</span>
+                        <span class="value">4,000</span>
+                    </div>
+                    <div class="config-box">
+                        <span class="label">Optimization</span>
+                        <span class="value">Early Stopping</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="eval-container">
+                <div class="eval-card">
+                    <h3>BERT Model Performance</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="label">Precision@10</span>
+                            <span class="value">0.7740</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="label">Recall@10</span>
+                            <span class="value">0.7740</span>
+                        </div>
+                    </div>
+                    <p style="color: #aaa; margin-top: 15px; font-size: 0.9rem;">* Genre-based relevance evaluation</p>
+                </div>
+
+                <div class="eval-card">
+                    <h3>LightGCN Model Performance</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="label">RMSE</span>
+                            <span class="value">1.1356</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="label">MAE</span>
+                            <span class="value">0.7798</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="label">Recall@10</span>
+                            <span class="value">0.9934</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="label">Precision@10</span>
+                            <span class="value">0.2009</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row" style="margin-top: 40px; padding-left: 0;">
+                <h3>LightGCN Training Loss</h3>
+                <div
+                    style="background: #1f1f1f; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center;">
+                    <img src="assets/models/lightgcn_loss_plot.png"
+                        style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                </div>
+            </div>
+
+            <div class="row" style="margin-top: 40px; padding-left: 0;">
+                <h3>Metrics Visualization</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                    <div style="background: #1f1f1f; padding: 20px; border-radius: 10px;">
+                        <canvas id="bertChart"></canvas>
+                    </div>
+                    <div style="background: #1f1f1f; padding: 20px; border-radius: 10px;">
+                        <canvas id="lightgcnChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis View -->
+        <div id="analysis-view" style="display:none; padding: 100px 4% 40px;">
+            <h2 style="margin-bottom: 30px; font-size: 2.5rem;">Data Analysis</h2>
+
+            <div class="row" style="padding-left: 0;">
+                <h3 style="margin-bottom: 20px; color: #e50914;">The MovieDB Data Analysis</h3>
+                <div class="analysis-grid">
+                    <!-- PNGs -->
+                    <div class="analysis-card">
+                        <h4>Top Genres</h4>
+                        <img src="assets/data_themoviedb/top_genres.png" alt="Top Genres">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Top Frequent Actors</h4>
+                        <img src="assets/data_themoviedb/top_frequent_actors.png" alt="Top Actors">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Movie Ratings Distribution</h4>
+                        <img src="assets/data_themoviedb/movie_ratings.png" alt="Movie Ratings">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Rating vs Popularity</h4>
+                        <img src="assets/data_themoviedb/rating_vs_popularity.png" alt="Rating vs Popularity">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Top Popularity Movies</h4>
+                        <img src="assets/data_themoviedb/top_popularity_movies.png" alt="Top Popularity">
+                    </div>
+                    <!-- HTML Charts -->
+                    <div class="analysis-card">
+                        <h4>Interactive: Movie Popularity vs Rating</h4>
+                        <iframe src="assets/data_themoviedb/movie_popularity_vs_rating.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Movie Ratings</h4>
+                        <iframe src="assets/data_themoviedb/movie_ratings.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Movies Over Time</h4>
+                        <iframe src="assets/data_themoviedb/movies_over_time.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Top Popular Movies</h4>
+                        <iframe src="assets/data_themoviedb/top_popular_movies.html"></iframe>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row" style="margin-top: 60px; padding-left: 0;">
+                <h3 style="margin-bottom: 20px; color: #e50914;">MovieLens & TMDB Merged Analysis</h3>
+                <div class="analysis-grid">
+                    <!-- PNGs -->
+                    <div class="analysis-card">
+                        <h4>Rating Distribution</h4>
+                        <img src="assets/movie_lens_map_themoviedb/rating_distribution.png" alt="Rating Distribution">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Number of Ratings by Year</h4>
+                        <img src="assets/movie_lens_map_themoviedb/number_of_ratings_by_year.png" alt="Ratings by Year">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Popularity vs Rating</h4>
+                        <img src="assets/movie_lens_map_themoviedb/popularity_vs_rating.png" alt="Popularity vs Rating">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Rating per Movie</h4>
+                        <img src="assets/movie_lens_map_themoviedb/rating_per_movie.png" alt="Rating per Movie">
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Rating per User</h4>
+                        <img src="assets/movie_lens_map_themoviedb/rating_per_user.png" alt="Rating per User">
+                    </div>
+                    <!-- HTML Charts -->
+                    <div class="analysis-card">
+                        <h4>Interactive: Avg Rating by Popularity Decile</h4>
+                        <iframe
+                            src="assets/movie_lens_map_themoviedb/average_rating_by_popularity_decile.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Avg Rating by Year</h4>
+                        <iframe src="assets/movie_lens_map_themoviedb/average_rating_by_year.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Number of Ratings by Year</h4>
+                        <iframe src="assets/movie_lens_map_themoviedb/number_of_ratings_by_year.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: Popularity vs Rating</h4>
+                        <iframe src="assets/movie_lens_map_themoviedb/popularity_vs_rating.html"></iframe>
+                    </div>
+                    <div class="analysis-card">
+                        <h4>Interactive: User Activity vs Rating Bias</h4>
+                        <iframe src="assets/movie_lens_map_themoviedb/user_activity_vs_rating_bias.html"></iframe>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -124,7 +370,7 @@
 
     </div>
 
-    <script src="js/app.js?v=6"></script>
+    <script src="js/app.js?v=22"></script>
 </body>
 
 </html>

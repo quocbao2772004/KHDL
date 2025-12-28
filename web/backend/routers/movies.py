@@ -45,7 +45,22 @@ def _load_data():
         _ratings_df["userId"] = _ratings_df["userId"].astype("int32")
         _ratings_df["tmdb_id"] = _ratings_df["tmdb_id"].astype("int32")
         _ratings_df["rating"] = _ratings_df["rating"].astype("float32")
-        print(f"Loaded {len(_ratings_df)} ratings")
+        
+        # Load ratings from database and overlay them
+        print("Loading ratings from database...")
+        db_ratings = db.get_all_ratings()
+        if db_ratings:
+            db_df = pd.DataFrame(db_ratings, columns=["userId", "tmdb_id", "rating"])
+            db_df["userId"] = db_df["userId"].astype("int32")
+            db_df["tmdb_id"] = db_df["tmdb_id"].astype("int32")
+            db_df["rating"] = db_df["rating"].astype("float32")
+            
+            # Merge: for each (userId, tmdb_id) in db_df, update or add to _ratings_df
+            # A simple way is to concat and drop duplicates, keeping the last (which is from DB)
+            _ratings_df = pd.concat([_ratings_df, db_df], ignore_index=True)
+            _ratings_df = _ratings_df.drop_duplicates(subset=["userId", "tmdb_id"], keep="last")
+            
+        print(f"Loaded {len(_ratings_df)} total ratings (including DB)")
     return _df, _ratings_df
 
 def get_average_ratings():
@@ -159,14 +174,13 @@ def get_movie_details(identifier: str):
 @router.get("/recommend/movie/{tmdb_id}", response_model=List[Movie])
 def get_recommendations(
     tmdb_id: int,
-    top_k: int = Query(10, ge=1, le=50),
+    top_k: int = Query(30, ge=1, le=50),
     user_id: Optional[int] = Query(None),
     user_rating: Optional[float] = Query(None, ge=0.5, le=5.0)
 ):
     """
-    Get recommendations for a movie.
-    - If user has rated the movie: use LightGCN
-    - If user hasn't rated: use BERT
+    Get recommendations for a movie using LightGCN (Collaborative Filtering).
+    This is used for the 'You may also like' section.
     """
     df, _ = _load_data()
     
@@ -175,42 +189,22 @@ def get_recommendations(
     if movie.empty:
         raise HTTPException(status_code=404, detail="Movie not found")
     
-    # Determine which recommendation system to use
-    use_cf = False
     actual_user_rating = user_rating
+    if user_id is not None and actual_user_rating is None:
+        actual_user_rating = get_user_rating(user_id, tmdb_id)
     
-    if user_id is not None:
-        # Get actual user rating if not provided
-        if actual_user_rating is None:
-            actual_user_rating = get_user_rating(user_id, tmdb_id)
-        
-        # If user has rated, use CF
-        if actual_user_rating is not None:
-            use_cf = True
-    
-    recommendations = None
-    
-    if use_cf:
-        # Use LightGCN for collaborative filtering
-        try:
-            recommendations = rcm_lightgcn.recommend_by_movie(
-                movie_id=tmdb_id,
-                top_k=top_k,
-                user_rating=actual_user_rating
-            )
-        except Exception as e:
-            print(f"LightGCN failed: {e}, falling back to BERT")
-            use_cf = False
-    
-    if not use_cf or recommendations is None or recommendations.empty:
-        # Use BERT-based recommendations
-        try:
-            movie_title = movie.iloc[0]["title"]
-            recommendations = rcm_bert.recommend_by_title(movie_title, top_k=top_k)
-        except Exception as e:
-            print(f"BERT recommendation failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
-    
+    # Use LightGCN for collaborative filtering
+    try:
+        recommendations = rcm_lightgcn.recommend_by_movie(
+            movie_id=tmdb_id,
+            top_k=top_k,
+            user_rating=actual_user_rating,
+            user_id=user_id
+        )
+    except Exception as e:
+        print(f"LightGCN failed: {e}")
+        return []
+
     # Merge with df to get full movie info
     if recommendations is not None and not recommendations.empty:
         # Create poster_map from recommendations before merging
@@ -430,10 +424,8 @@ def get_recommendations_by_identifier(
     user_rating: Optional[float] = Query(None, ge=0.5, le=5.0)
 ):
     """
-    Get recommendations for a movie by title or tmdb_id.
-    This endpoint must be placed after all specific routes like /recommend/director/, /recommend/actor/, etc.
-    - If user has rated the movie: use LightGCN
-    - If user hasn't rated: use BERT
+    Get recommendations for a movie by title or tmdb_id using BERT.
+    This is used for the main 'Recommendations' section.
     """
     df, _ = _load_data()
     
@@ -458,8 +450,52 @@ def get_recommendations_by_identifier(
     if movie.empty:
         raise HTTPException(status_code=404, detail="Movie not found")
     
-    # Call the main recommendation function
-    return get_recommendations(tmdb_id, top_k, user_id, user_rating)
+    # Use BERT-based recommendations
+    try:
+        movie_title = movie.iloc[0]["title"]
+        recommendations = rcm_bert.recommend_by_title(movie_title, top_k=top_k)
+    except Exception as e:
+        print(f"BERT recommendation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
+
+    # Merge with df to get full movie info
+    if recommendations is not None and not recommendations.empty:
+        # Create poster_map from recommendations before merging
+        poster_map = {}
+        score_map = {}
+        for idx, row in recommendations.iterrows():
+            rec_tmdb_id = int(row.get("tmdb_id", 0))
+            if rec_tmdb_id:
+                poster_map[rec_tmdb_id] = row.get("poster_path", "")
+                score_map[rec_tmdb_id] = row.get("score", None)
+        
+        # Merge with df
+        recommendations = recommendations.merge(
+            df,
+            on="tmdb_id",
+            how="left",
+            suffixes=("", "_df")
+        )
+        
+        # Prioritize poster_path from recommendations, fallback to df
+        if "poster_path_df" in recommendations.columns:
+            recommendations["poster_path"] = recommendations.apply(
+                lambda r: poster_map.get(int(r["tmdb_id"]), "") or r.get("poster_path_df", ""),
+                axis=1
+            )
+        
+        # Ensure score is preserved
+        if "score" not in recommendations.columns or recommendations["score"].isna().all():
+            recommendations["score"] = recommendations["tmdb_id"].map(score_map)
+    
+    # Convert to Movie objects
+    movies = []
+    if recommendations is not None and not recommendations.empty:
+        for _, row in recommendations.iterrows():
+            score = row.get("score")
+            movies.append(_df_to_movie(row, score=float(score) if pd.notna(score) else None))
+    
+    return movies
 
 @router.post("/rate", response_model=dict)
 def rate_movie(request: RateRequest):
@@ -474,6 +510,12 @@ def rate_movie(request: RateRequest):
     tmdb_id_int = int(request.movie_id)  # movie_id từ frontend = tmdb_id
     rating_float = float(request.rating)
     
+    # Save to database
+    try:
+        db.save_rating(user_id_int, tmdb_id_int, rating_float)
+    except Exception as e:
+        print(f"Error saving rating to DB: {e}")
+
     mask = (ratings["userId"] == user_id_int) & (ratings["tmdb_id"] == tmdb_id_int)
     
     if mask.any():
@@ -503,7 +545,7 @@ def rate_movie(request: RateRequest):
     try:
         cf_recs = rcm_lightgcn.recommend_by_movie(
             movie_id=tmdb_id_int,
-            top_k=10,
+            top_k=30,
             user_rating=rating_float
         )
         
@@ -536,13 +578,6 @@ def rate_movie(request: RateRequest):
 
 @router.get("/ratings/{user_id}", response_model=List[dict])
 def get_user_ratings(user_id: int):
-    """Get all ratings for a specific user."""
-    _, ratings = _load_data()
-    
-    user_ratings = ratings[ratings["userId"] == user_id]
-    
-    if user_ratings.empty:
-        return []
-        
-    return user_ratings[["tmdb_id", "rating"]].to_dict(orient="records")
+    """Get all ratings for a specific user from the database."""
+    return db.get_all_user_ratings(user_id)
 

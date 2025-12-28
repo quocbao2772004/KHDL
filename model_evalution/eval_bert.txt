@@ -1,0 +1,23 @@
+Bert
+Average Precision@10: 0.7740
+Average Recall@10 (Genre-based): 0.7740
+LightGCN
+Validation Set Metrics:
+  rmse: 1.1381
+  mae: 0.7809
+  recall@5: 0.9620
+  precision@5: 0.3632
+  recall@10: 0.9932
+  precision@10: 0.2014
+  recall@20: 0.9995
+  precision@20: 0.1039
+
+Test Set Metrics:
+  rmse: 1.1356
+  mae: 0.7798
+  recall@5: 0.9622
+  precision@5: 0.3625
+  recall@10: 0.9934
+  precision@10: 0.2009
+  recall@20: 0.9995
+  precision@20: 0.1036

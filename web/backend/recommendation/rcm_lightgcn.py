@@ -135,18 +135,27 @@ def _load_model():
 
 
 def _load_data():
-    """Load ratings and tmdb data."""
+    """Load ratings and tmdb data, including DB ratings."""
     global _ratings, _tmdb
-    
     if _ratings is not None and _tmdb is not None:
         return _ratings, _tmdb
-    
     try:
         print("Loading ratings and tmdb data...")
         _ratings = pd.read_parquet(RATINGS_PATH)
         _ratings["userId"] = _ratings["userId"].astype("int32")
         _ratings["tmdb_id"] = _ratings["tmdb_id"].astype("int32")
         _ratings["rating"] = _ratings["rating"].astype("float32")
+        
+        # Sync with DB
+        import database as db
+        db_ratings = db.get_all_ratings()
+        if db_ratings:
+            db_df = pd.DataFrame(db_ratings, columns=["userId", "tmdb_id", "rating"])
+            db_df["userId"] = db_df["userId"].astype("int32")
+            db_df["tmdb_id"] = db_df["tmdb_id"].astype("int32")
+            db_df["rating"] = db_df["rating"].astype("float32")
+            _ratings = pd.concat([_ratings, db_df], ignore_index=True)
+            _ratings = _ratings.drop_duplicates(subset=["userId", "tmdb_id"], keep="last")
         
         _tmdb = pd.read_csv(TMDB_PATH)
         return _ratings, _tmdb
@@ -223,16 +232,17 @@ def recommend_cf(user_id, top_k=10):
     ratings, _ = _load_data()
     seen_tmdb_ids = set(ratings[ratings['userId'] == user_id]['tmdb_id'].astype(int))
     
-    # Predict scores for all movies
-    user_ids_tensor = torch.tensor([user_idx] * len(all_movie_indices), dtype=torch.long).to(device)
-    movie_ids_tensor = torch.tensor(all_movie_indices, dtype=torch.long).to(device)
+    # Predict scores for all movies using vectorized dot product
+    user_emb = embeddings[user_idx].view(1, -1)
+    num_users = meta['num_users']
+    item_embs = embeddings[num_users:]
     
     with torch.no_grad():
-        scores = model.predict(user_ids_tensor, movie_ids_tensor, embeddings).cpu().numpy()
+        scores = torch.mm(user_emb, item_embs.t()).squeeze(0).cpu().numpy()
     
     # Create results DataFrame
     results = []
-    for movie_idx, score in zip(all_movie_indices, scores):
+    for movie_idx, score in enumerate(scores):
         # Convert back to original tmdb_id
         if movie_idx in mappings['reverse_movie_map']:
             tmdb_id = mappings['reverse_movie_map'][movie_idx]
@@ -272,146 +282,98 @@ def recommend_cf(user_id, top_k=10):
     return results_df[['tmdb_id', 'title', 'poster_path', 'score']].copy()
 
 
-def recommend_by_movie(movie_id, top_k=10, user_rating=None):
+def preload():
+    """Pre-load model and data to memory."""
+    try:
+        _load_model()
+        _load_data()
+        _create_graph_and_embeddings()
+        print("LightGCN pre-loading complete.")
+    except Exception as e:
+        print(f"LightGCN pre-loading failed: {e}")
+
+def recommend_by_movie(movie_id, top_k=30, user_rating=None, user_id=None):
     """
-    Recommend movies based on a movie using LightGCN.
-    
-    Strategy:
-    - Find users who rated this movie (optionally with similar rating)
-    - Recommend movies that these users rated highly
-    
-    Args:
-        movie_id: Original tmdb_id (not reindexed)
-        top_k: Number of recommendations
-        user_rating: Optional user rating for this movie (to filter similar users)
-    
-    Returns:
-        DataFrame with columns: tmdb_id, title, poster_path, score
+    Highly optimized dynamic recommendation logic.
     """
     model, meta, mappings = _load_model()
+    if model is None: return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
     ratings, tmdb = _load_data()
     _, _, embeddings = _create_graph_and_embeddings()
     
     movie_id = int(movie_id)
-    
-    # Convert movie_id to internal index
     if movie_id not in mappings['movie_id_map']:
+        # FALLBACK: If movie is unknown to LightGCN, use User's overall history
+        if user_id is not None:
+            print(f"Movie {movie_id} unknown to LightGCN. Falling back to personalized recommendations for user {user_id}")
+            return recommend_cf(user_id, top_k=top_k)
         return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
     
     movie_idx = mappings['movie_id_map'][movie_id]
-    
-    # Find users who rated this movie
-    movie_ratings = ratings[ratings['tmdb_id'] == movie_id].copy()
-    
-    if movie_ratings.empty:
-        return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
-    
-    # Filter by user_rating if provided
+    num_users = meta['num_users']
+
+    # DYNAMIC: If user rated, find similar users
     if user_rating is not None:
-        # Find users with similar rating (±0.5)
-        rating_low = max(0.5, user_rating - 0.5)
-        rating_high = min(5.0, user_rating + 0.5)
-        movie_ratings = movie_ratings[
-            (movie_ratings['rating'] >= rating_low) & 
-            (movie_ratings['rating'] <= rating_high)
-        ]
-        
-        if movie_ratings.empty:
-            # Fallback: expand range
-            rating_low = max(0.5, user_rating - 1.0)
-            rating_high = min(5.0, user_rating + 1.0)
-            movie_ratings = ratings[
-                (ratings['tmdb_id'] == movie_id) &
-                (ratings['rating'] >= rating_low) & 
-                (ratings['rating'] <= rating_high)
-            ]
+        # Fast query
+        sim_users = ratings.query(f"tmdb_id == {movie_id} and rating >= {user_rating - 1.0} and rating <= {user_rating + 1.0}")['userId'].unique()
+        if len(sim_users) > 0:
+            if len(sim_users) > 200: sim_users = np.random.choice(sim_users, 200, replace=False)
+            
+            # What else did they like?
+            recs = ratings[ratings['userId'].isin(sim_users)].query(f"tmdb_id != {movie_id} and rating >= 4.0")
+            if not recs.empty:
+                counts = recs['tmdb_id'].value_counts().head(top_k)
+                results = []
+                for tid, count in counts.items():
+                    if tid in mappings['movie_id_map']:
+                        results.append({'tmdb_id': int(tid), 'score': 0.5 + 0.4 * (count / counts.max())})
+                if results:
+                    res_df = pd.DataFrame(results).merge(tmdb[['tmdb_id', 'title', 'poster_path']], on='tmdb_id', how='left')
+                    return res_df.head(top_k)
+
+    # FALLBACK: Embedding similarity
+    target_emb = embeddings[num_users + movie_idx].view(1, -1)
+    item_embeddings = embeddings[num_users:]
+    with torch.no_grad():
+        sims = torch.mm(target_emb, item_embeddings.t())
+        norm_t = torch.norm(target_emb, p=2)
+        norm_i = torch.norm(item_embeddings, p=2, dim=1)
+        sims = (sims.squeeze(0) / (norm_t * norm_i + 1e-8)).cpu().numpy()
     
-    if movie_ratings.empty:
-        return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
+    top_idx = np.argsort(sims)[::-1][:top_k + 1]
+    results = []
+    for i in top_idx:
+        if i == movie_idx: continue
+        if i in mappings['reverse_movie_map']:
+            tid = mappings['reverse_movie_map'][i]
+            results.append({'tmdb_id': int(tid), 'score': float(sims[i])})
+        if len(results) >= top_k: break
+            
+    result_df = pd.DataFrame(results)
+    result_df = result_df.merge(tmdb[['tmdb_id', 'title', 'poster_path']], on='tmdb_id', how='left')
     
-    # Get user indices (internal)
-    user_ids_original = movie_ratings['userId'].unique()
-    user_indices = [mappings['user_id_map'][uid] for uid in user_ids_original if uid in mappings['user_id_map']]
-    
-    if not user_indices:
-        return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
-    
-    # Find movies rated by these users (excluding the current movie)
-    other_movies = ratings[
-        (ratings['userId'].isin(user_ids_original)) &
-        (ratings['tmdb_id'] != movie_id)
-    ]
-    
-    if other_movies.empty:
-        return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
-    
-    # Get unique movie IDs and their average ratings from these users
-    movie_scores = other_movies.groupby('tmdb_id').agg({
-        'rating': ['mean', 'count']
-    }).reset_index()
-    movie_scores.columns = ['tmdb_id', 'avg_rating', 'rating_count']
-    
-    # Filter to movies that exist in our model
-    movie_scores = movie_scores[movie_scores['tmdb_id'].isin(mappings['movie_id_map'].keys())]
-    
-    if movie_scores.empty:
-        return pd.DataFrame(columns=['tmdb_id', 'title', 'poster_path', 'score'])
-    
-    # Calculate score: avg_rating * log(rating_count + 1)
-    movie_scores['score'] = movie_scores['avg_rating'] * np.log1p(movie_scores['rating_count'])
-    
-    # Sort and get top_k
-    movie_scores = movie_scores.sort_values('score', ascending=False).head(top_k)
-    
-    # Merge with tmdb
-    result = movie_scores.merge(
-        tmdb[['tmdb_id', 'title', 'poster_path']],
-        on='tmdb_id',
-        how='left'
-    )
-    
-    # Normalize score to [0.6, 0.9]
-    if len(result) > 0:
-        scores_raw = result['score'].values
-        score_max = scores_raw.max()
-        score_min = scores_raw.min()
-        
-        if score_max > score_min:
-            scores_normalized = (scores_raw - score_min) / (score_max - score_min)
-            result['score'] = 0.6 + 0.3 * scores_normalized
-        elif score_max > 0:
-            result['score'] = np.linspace(0.8, 0.7, len(result))
+    if len(result_df) > 0:
+        s_max, s_min = result_df['score'].max(), result_df['score'].min()
+        if s_max > s_min:
+            result_df['score'] = 0.6 + 0.3 * (result_df['score'] - s_min) / (s_max - s_min)
         else:
-            result['score'] = 0.7
-    
-    return result[['tmdb_id', 'title', 'poster_path', 'score']].copy()
+            result_df['score'] = 0.8
+            
+    return result_df[['tmdb_id', 'title', 'poster_path', 'score']]
 
 
 def add_rating(user_id, movie_id, rating):
-    """
-    Add or update a rating (for future use with online learning).
-    Currently just updates the in-memory ratings DataFrame.
-    """
+    """Update in-memory ratings immediately."""
     global _ratings
+    if _ratings is not None:
+        mask = (_ratings['userId'] == int(user_id)) & (_ratings['tmdb_id'] == int(movie_id))
+        if mask.any():
+            _ratings.loc[mask, 'rating'] = float(rating)
+        else:
+            new_row = pd.DataFrame({'userId': [int(user_id)], 'tmdb_id': [int(movie_id)], 'rating': [float(rating)], 'timestamp': [0]})
+            _ratings = pd.concat([_ratings, new_row], ignore_index=True)
     
-    ratings, _ = _load_data()
-    
-    user_id_int = int(user_id)
-    movie_id_int = int(movie_id)
-    
-    mask = (ratings['userId'] == user_id_int) & (ratings['tmdb_id'] == movie_id_int)
-    if mask.any():
-        ratings.loc[mask, 'rating'] = float(rating)
-    else:
-        new_row = pd.DataFrame({
-            'userId': [user_id_int], 
-            'tmdb_id': [movie_id_int], 
-            'rating': [float(rating)], 
-            'timestamp': [0]
-        })
-        ratings = pd.concat([ratings, new_row], ignore_index=True)
-    
-    # Invalidate embeddings cache (would need to recompute)
-    global _embeddings
-    _embeddings = None
+    # Invalidate embeddings cache (disabled for speed - recompute periodically instead)
+    # global _embeddings
+    # _embeddings = None
 
